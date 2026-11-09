@@ -58,12 +58,15 @@ public final class CoreSelfTest {
                 String styles = new String(archive.getInputStream(archive.getEntry("xl/styles.xml")).readAllBytes(), StandardCharsets.UTF_8);
                 String report = new String(archive.getInputStream(archive.getEntry("xl/worksheets/sheet4.xml")).readAllBytes(), StandardCharsets.UTF_8);
                 if (!styles.contains("FF1C2A43") || !styles.contains("FFF0F5FB")
+                        || !styles.contains("B Nazanin")
                         || !styles.contains("numFmtId=\"49\"")) {
                     throw new AssertionError("Expected styled report header and alternating row fill");
                 }
                 if (!report.contains("rightToLeft=\"1\"") || !report.contains("showGridLines=\"0\"")
+                        || !report.contains("topLeftCell=\"A1\"") || report.contains("<pane")
+                        || !report.contains("<selection activeCell=\"A1\"")
                         || !report.contains("<autoFilter") || !report.contains("FF20845A")) {
-                    throw new AssertionError("Expected RTL, gridless, filterable matched report");
+                    throw new AssertionError("Expected stable RTL initial view and filterable matched report");
                 }
             }
         } finally {

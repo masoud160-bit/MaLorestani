@@ -63,7 +63,8 @@ public final class XlsxWriter {
     private static String workbook(List<Sheet> sheets) {
         StringBuilder s = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\""
-                + " xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets>");
+                + " xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">"
+                + "<bookViews><workbookView activeTab=\"0\" firstSheet=\"0\"/></bookViews><sheets>");
         for (int i = 0; i < sheets.size(); i++) {
             s.append("<sheet name=\"").append(escape(sheets.get(i).name)).append("\" sheetId=\"")
                     .append(i + 1).append("\" r:id=\"rId").append(i + 1).append("\"/>");
@@ -88,8 +89,8 @@ public final class XlsxWriter {
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
                 + "<fonts count=\"2\">"
-                + "<font><sz val=\"11\"/><name val=\"Arial\"/><color rgb=\"FF26364E\"/></font>"
-                + "<font><b/><sz val=\"11\"/><name val=\"Arial\"/><color rgb=\"FFFFFFFF\"/></font>"
+                + "<font><sz val=\"12\"/><name val=\"B Nazanin\"/><color rgb=\"FF26364E\"/></font>"
+                + "<font><b/><sz val=\"13\"/><name val=\"B Nazanin\"/><color rgb=\"FFFFFFFF\"/></font>"
                 + "</fonts>"
                 + "<fills count=\"4\">"
                 + "<fill><patternFill patternType=\"none\"/></fill>"
@@ -131,9 +132,10 @@ public final class XlsxWriter {
         w.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
                 + "<sheetPr><tabColor rgb=\"" + tabColor(sheet.name) + "\"/></sheetPr>"
-                + "<sheetViews><sheetView rightToLeft=\"1\" showGridLines=\"0\" workbookViewId=\"0\">"
-                + "<pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/>"
-                + "</sheetView></sheetViews><sheetFormatPr defaultRowHeight=\"23\"/>"
+                + "<sheetViews><sheetView rightToLeft=\"1\" showGridLines=\"0\" topLeftCell=\"A1\""
+                + " zoomScale=\"100\" workbookViewId=\"0\">"
+                + "<selection activeCell=\"A1\" sqref=\"A1\"/>"
+                + "</sheetView></sheetViews><sheetFormatPr defaultRowHeight=\"26\"/>"
                 + "<cols>");
         List<String> headers = sheet.rows.get(0);
         for (int c = 0; c < headers.size(); c++) {
@@ -146,7 +148,7 @@ public final class XlsxWriter {
         for (int r = 0; r < sheet.rows.size(); r++) {
             List<String> row = sheet.rows.get(r);
             w.write("<row r=\"" + (r + 1) + "\""
-                    + (r == 0 ? " ht=\"29\" customHeight=\"1\"" : "") + ">");
+                    + (r == 0 ? " ht=\"33\" customHeight=\"1\"" : "") + ">");
             for (int c = 0; c < row.size(); c++) {
                 int style = r == 0 ? 1 : c == 0 ? (r % 2 == 0 ? 4 : 3) : (r % 2 == 0 ? 2 : 0);
                 w.write("<c r=\"" + columnName(c) + (r + 1) + "\" t=\"inlineStr\" s=\""
