@@ -11,10 +11,12 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
+import android.content.Context;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -55,6 +57,7 @@ public final class MainActivity extends Activity {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler ui = new Handler(Looper.getMainLooper());
     private AuditDb database;
+    private ScrollView screenScroll;
     private TextView overview;
     private TextView recentList;
     private EditText plateInput;
@@ -88,14 +91,16 @@ public final class MainActivity extends Activity {
 
     private void buildScreen() {
         ScrollView scroll = new ScrollView(this);
+        screenScroll = scroll;
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(Color.rgb(244, 247, 251));
         scroll.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         LinearLayout root = vertical();
-        root.setPadding(dp(16), dp(16), dp(16), dp(30));
+        root.setPadding(dp(12), dp(8), dp(12), dp(24));
         scroll.addView(root);
 
         LinearLayout hero = card(NAVY);
+        hero.setPadding(dp(12), dp(5), dp(12), dp(5));
         LinearLayout heroHeader = new LinearLayout(this);
         heroHeader.setOrientation(LinearLayout.HORIZONTAL);
         heroHeader.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
@@ -107,50 +112,42 @@ public final class MainActivity extends Activity {
         menuBackground.setColor(Color.rgb(55, 72, 99));
         menuBackground.setCornerRadius(dp(9));
         menuButton.setBackground(menuBackground);
-        heroHeader.addView(menuButton, new LinearLayout.LayoutParams(dp(44), dp(44)));
-        TextView title = text("کنترل و تطبیق اثاثیه", 24, Color.WHITE, true);
+        heroHeader.addView(menuButton, new LinearLayout.LayoutParams(dp(38), dp(38)));
+        TextView title = text("کنترل و تطبیق اثاثیه", 19, Color.WHITE, true);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         titleParams.setMarginStart(dp(8));
         heroHeader.addView(title, titleParams);
         hero.addView(heroHeader);
         menuButton.setOnClickListener(v -> showAuditMenu(menuButton));
-        TextView subtitle = text("انبارگردانی پلاک‌محور • بدون اینترنت", 13, Color.rgb(205, 220, 241), false);
-        subtitle.setPadding(0, dp(7), 0, 0);
-        hero.addView(subtitle);
         root.addView(hero, cardParams());
 
         overview = text("", 14, MUTED, false);
         overview.setLineSpacing(dp(5), 1f);
 
-        importButton = button("۱. ورود فایل اکسل", BLUE);
-        exportButton = button("۳. دریافت سه گزارش اکسل", NAVY);
-        root.addView(importButton, cardParams());
-        root.addView(exportButton, cardParams());
-        importButton.setOnClickListener(v -> openExcelPicker());
-        exportButton.setOnClickListener(v -> confirmExport());
-
-        loading = new ProgressBar(this);
-        loading.setIndeterminate(true);
-        loading.setVisibility(View.GONE);
-        root.addView(loading, cardParams());
-
         LinearLayout lookupCard = card(Color.WHITE);
-        lookupCard.addView(text("۲. بررسی پلاک مشاهده‌شده", 18, NAVY, true));
-        TextView help = text("پلاک روی اثاثیه را وارد کنید. صفرهای ابتدای پلاک حفظ می‌شوند.", 13, MUTED, false);
-        help.setPadding(0, dp(6), 0, dp(10));
-        lookupCard.addView(help);
+        lookupCard.setPadding(dp(13), dp(12), dp(13), dp(12));
+        TextView lookupHeading = text("بررسی پلاک اثاثیه", 16, NAVY, true);
+        lookupHeading.setPadding(0, 0, 0, dp(7));
+        lookupCard.addView(lookupHeading);
+        LinearLayout lookupRow = new LinearLayout(this);
+        lookupRow.setOrientation(LinearLayout.HORIZONTAL);
+        lookupRow.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        lookupRow.setGravity(Gravity.CENTER_VERTICAL);
         plateInput = entry("شماره پلاک اثاثیه");
         plateInput.setInputType(InputType.TYPE_CLASS_NUMBER);
-        plateInput.setTextSize(25);
-        plateInput.setMinHeight(dp(72));
+        plateInput.setTextSize(24);
+        plateInput.setMinHeight(dp(68));
         plateInput.setGravity(Gravity.CENTER);
         plateInput.setTextDirection(View.TEXT_DIRECTION_LTR);
         plateInput.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         plateInput.setSingleLine(true);
-        lookupCard.addView(plateInput, fullParams(dp(10)));
-        lookupButton = button("جست‌وجوی پلاک", BLUE);
-        lookupCard.addView(lookupButton);
+        LinearLayout.LayoutParams plateParams = new LinearLayout.LayoutParams(0, dp(68), 1f);
+        plateParams.setMarginEnd(dp(8));
+        lookupRow.addView(plateInput, plateParams);
+        lookupButton = button("جست‌وجو", BLUE);
+        lookupRow.addView(lookupButton, new LinearLayout.LayoutParams(dp(100), dp(68)));
+        lookupCard.addView(lookupRow);
         lookupButton.setOnClickListener(v -> searchPlate());
         plateInput.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEARCH) { searchPlate(); return true; }
@@ -159,14 +156,17 @@ public final class MainActivity extends Activity {
         root.addView(lookupCard, cardParams());
 
         resultPanel = card(Color.WHITE);
-        foundTitle = text("", 19, NAVY, true);
+        resultPanel.setPadding(dp(13), dp(12), dp(13), dp(12));
+        foundTitle = text("", 18, NAVY, true);
         foundDescription = text("", 15, NAVY, false);
-        foundDescription.setPadding(0, dp(10), 0, dp(10));
+        foundDescription.setPadding(0, dp(5), 0, dp(8));
         previousObservation = text("", 13, ORANGE, false);
         previousObservation.setVisibility(View.GONE);
-        previousObservation.setPadding(0, 0, 0, dp(9));
+        previousObservation.setPadding(0, dp(7), 0, dp(9));
         resultPanel.addView(foundTitle);
         resultPanel.addView(foundDescription);
+        matchedButton = button("تأیید: نام اثاثیه مطابق است", GREEN);
+        resultPanel.addView(matchedButton, fullParams(dp(5)));
         resultPanel.addView(previousObservation);
         actualInput = entry("نام واقعی اثاثیه مشاهده‌شده را بنویسید");
         actualInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
@@ -174,11 +174,9 @@ public final class MainActivity extends Activity {
         actualInput.setMinLines(1);
         actualInput.setMaxLines(3);
         resultPanel.addView(actualInput, fullParams(dp(10)));
-        matchedButton = button("تأیید: نام اثاثیه مطابق است", GREEN);
         mismatchButton = button("ثبت مغایرت نام اثاثیه", ORANGE);
         extraButton = button("ثبت پلاک خارج از فهرست", RED);
         removeButton = button("حذف ثبت قبلی این پلاک", MUTED);
-        resultPanel.addView(matchedButton, fullParams(dp(8)));
         resultPanel.addView(mismatchButton, fullParams(dp(8)));
         resultPanel.addView(extraButton, fullParams(dp(8)));
         resultPanel.addView(removeButton);
@@ -191,6 +189,21 @@ public final class MainActivity extends Activity {
 
         recentList = text("", 14, MUTED, false);
         recentList.setLineSpacing(dp(5), 1.0f);
+
+        LinearLayout fileCard = card(Color.WHITE);
+        fileCard.addView(text("مدیریت فایل و گزارش‌ها", 16, NAVY, true));
+        importButton = button("ورود فایل اکسل", BLUE);
+        exportButton = button("دریافت سه گزارش اکسل", NAVY);
+        fileCard.addView(importButton, fullParams(dp(8)));
+        fileCard.addView(exportButton);
+        root.addView(fileCard, cardParams());
+        importButton.setOnClickListener(v -> openExcelPicker());
+        exportButton.setOnClickListener(v -> confirmExport());
+
+        loading = new ProgressBar(this);
+        loading.setIndeterminate(true);
+        loading.setVisibility(View.GONE);
+        root.addView(loading, cardParams());
 
         TextView note = text("نکته: تا پایان بازدید، «مشاهده‌نشده» به معنی مفقود بودن قطعی نیست. "
                 + "اطلاعات روی همین دستگاه ذخیره می‌شود و با ورود فهرست جدید، پس از تأیید شما، "
@@ -239,7 +252,10 @@ public final class MainActivity extends Activity {
     private void searchPlate() {
         if (busy) return;
         if (database.counts().inventory == 0) {
-            alert("ابتدا فایل اکسل اثاثیه را وارد کنید.");
+            new AlertDialog.Builder(this).setTitle("فهرست اثاثیه وارد نشده است")
+                    .setMessage("برای شروع بررسی، ابتدا فایل اکسل اثاثیه را انتخاب کنید.")
+                    .setPositiveButton("انتخاب فایل اکسل", (dialog, which) -> openExcelPicker())
+                    .setNegativeButton("بعداً", null).show();
             return;
         }
         String plate = PlateNormalizer.normalize(plateInput.getText().toString());
@@ -257,8 +273,7 @@ public final class MainActivity extends Activity {
         } else {
             foundTitle.setText("پلاک «" + plate + "» پیدا شد");
             foundTitle.setTextColor(GREEN);
-            foundDescription.setText("نام ثبت‌شده در اکسل:\n" + selectedItem.name
-                    + "\n\nاگر این نام صحیح است، تأیید کنید؛ در غیر این صورت نام واقعی را بنویسید.");
+            foundDescription.setText("نام ثبت‌شده: " + selectedItem.name);
             matchedButton.setVisibility(View.VISIBLE);
             mismatchButton.setVisibility(View.VISIBLE);
             extraButton.setVisibility(View.GONE);
@@ -268,6 +283,8 @@ public final class MainActivity extends Activity {
         removeButton.setVisibility(previous == null ? View.GONE : View.VISIBLE);
         if (previous != null) previousObservation.setText("این پلاک قبلاً ثبت شده است. ثبت جدید، نتیجهٔ قبلی را اصلاح می‌کند.");
         resultPanel.setVisibility(View.VISIBLE);
+        hideKeyboard(plateInput);
+        screenScroll.post(() -> screenScroll.smoothScrollTo(0, 0));
     }
 
     private void submitObservation(int status) {
@@ -288,7 +305,9 @@ public final class MainActivity extends Activity {
             selectedPlate = null;
             selectedItem = null;
             resultPanel.setVisibility(View.GONE);
+            hideKeyboard(actualInput);
             plateInput.requestFocus();
+            screenScroll.post(() -> screenScroll.smoothScrollTo(0, 0));
             refreshDashboard();
         } catch (Exception ex) { alert("ثبت ناموفق بود: " + ex.getMessage()); }
     }
@@ -498,6 +517,7 @@ public final class MainActivity extends Activity {
                                 selectedItem = null;
                                 plateInput.setText("");
                                 resultPanel.setVisibility(View.GONE);
+                                screenScroll.post(() -> screenScroll.smoothScrollTo(0, 0));
                                 refreshDashboard();
                                 discardPendingImport();
                                 Toast.makeText(this, "فهرست جدید آمادهٔ کنترل است.", Toast.LENGTH_LONG).show();
@@ -592,6 +612,12 @@ public final class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("کنترل اثاثیه")
                 .setMessage(message == null ? "خطای نامشخص" : message)
                 .setPositiveButton("بستن", null).show();
+    }
+
+    private void hideKeyboard(View input) {
+        InputMethodManager keyboard = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (keyboard != null) keyboard.hideSoftInputFromWindow(input.getWindowToken(), 0);
+        input.clearFocus();
     }
 
     private LinearLayout vertical() {
