@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Inventory clipboard silhouette -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M36,27 L72,27 C77,27 81,31 81,36 L81,83 C81,88 77,92 72,92 L36,92 C31,92 27,88 27,83 L27,36 C27,31 31,27 36,27 Z" />
+    <!-- Clipboard fastener -->
+    <path android:fillColor="#F8B64C"
+        android:pathData="M45,23 L48,23 C48,19 51,16 54,16 C57,16 60,19 60,23 L63,23 C66,23 68,25 68,28 L68,32 L40,32 L40,28 C40,25 42,23 45,23 Z" />
+    <!-- Registration plate -->
+    <path android:fillColor="#265CA1"
+        android:pathData="M38,43 L70,43 C72,43 73,44 73,46 L73,61 C73,63 72,64 70,64 L38,64 C36,64 35,63 35,61 L35,46 C35,44 36,43 38,43 Z" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M41,48 L45,48 L45,59 L41,59 Z M49,48 L53,48 L53,59 L49,59 Z M57,48 L61,48 L61,59 L57,59 Z M65,48 L69,48 L69,59 L65,59 Z" />
+    <!-- Successful visual inspection -->
+    <path android:fillColor="#15845E"
+        android:pathData="M41,75 L48,82 L67,66 L72,71 L48,89 L36,80 Z" />
+</vector>

@@ -10,6 +10,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,6 +19,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Spinner;
@@ -94,20 +96,32 @@ public final class MainActivity extends Activity {
         scroll.addView(root);
 
         LinearLayout hero = card(NAVY);
+        LinearLayout heroHeader = new LinearLayout(this);
+        heroHeader.setOrientation(LinearLayout.HORIZONTAL);
+        heroHeader.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        heroHeader.setGravity(Gravity.CENTER_VERTICAL);
+        TextView menuButton = text("☰", 25, Color.WHITE, true);
+        menuButton.setGravity(Gravity.CENTER);
+        menuButton.setContentDescription("منوی وضعیت بررسی و سابقهٔ پلاک‌ها");
+        GradientDrawable menuBackground = new GradientDrawable();
+        menuBackground.setColor(Color.rgb(55, 72, 99));
+        menuBackground.setCornerRadius(dp(9));
+        menuButton.setBackground(menuBackground);
+        heroHeader.addView(menuButton, new LinearLayout.LayoutParams(dp(44), dp(44)));
         TextView title = text("کنترل و تطبیق اثاثیه", 24, Color.WHITE, true);
-        hero.addView(title);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        titleParams.setMarginStart(dp(8));
+        heroHeader.addView(title, titleParams);
+        hero.addView(heroHeader);
+        menuButton.setOnClickListener(v -> showAuditMenu(menuButton));
         TextView subtitle = text("انبارگردانی پلاک‌محور • بدون اینترنت", 13, Color.rgb(205, 220, 241), false);
         subtitle.setPadding(0, dp(7), 0, 0);
         hero.addView(subtitle);
         root.addView(hero, cardParams());
 
-        LinearLayout summaryCard = card(Color.WHITE);
-        summaryCard.addView(text("وضعیت بررسی", 18, NAVY, true));
         overview = text("", 14, MUTED, false);
         overview.setLineSpacing(dp(5), 1f);
-        overview.setPadding(0, dp(10), 0, 0);
-        summaryCard.addView(overview);
-        root.addView(summaryCard, cardParams());
 
         importButton = button("۱. ورود فایل اکسل", BLUE);
         exportButton = button("۳. دریافت سه گزارش اکسل", NAVY);
@@ -127,6 +141,11 @@ public final class MainActivity extends Activity {
         help.setPadding(0, dp(6), 0, dp(10));
         lookupCard.addView(help);
         plateInput = entry("شماره پلاک اثاثیه");
+        plateInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+        plateInput.setTextSize(25);
+        plateInput.setMinHeight(dp(72));
+        plateInput.setGravity(Gravity.CENTER);
+        plateInput.setTextDirection(View.TEXT_DIRECTION_LTR);
         plateInput.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         plateInput.setSingleLine(true);
         lookupCard.addView(plateInput, fullParams(dp(10)));
@@ -150,6 +169,7 @@ public final class MainActivity extends Activity {
         resultPanel.addView(foundDescription);
         resultPanel.addView(previousObservation);
         actualInput = entry("نام واقعی اثاثیه مشاهده‌شده را بنویسید");
+        actualInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         actualInput.setSingleLine(false);
         actualInput.setMinLines(1);
         actualInput.setMaxLines(3);
@@ -169,19 +189,29 @@ public final class MainActivity extends Activity {
         resultPanel.setVisibility(View.GONE);
         root.addView(resultPanel, cardParams());
 
-        LinearLayout recentCard = card(Color.WHITE);
-        recentCard.addView(text("آخرین پلاک‌های بررسی‌شده", 17, NAVY, true));
         recentList = text("", 14, MUTED, false);
         recentList.setLineSpacing(dp(5), 1.0f);
-        recentList.setPadding(0, dp(10), 0, 0);
-        recentCard.addView(recentList);
-        root.addView(recentCard, cardParams());
 
         TextView note = text("نکته: تا پایان بازدید، «مشاهده‌نشده» به معنی مفقود بودن قطعی نیست. "
                 + "اطلاعات روی همین دستگاه ذخیره می‌شود و با ورود فهرست جدید، پس از تأیید شما، "
                 + "نتایج قبلی پاک می‌شود؛ بنابراین ابتدا گزارش بگیرید.", 12, MUTED, false);
         root.addView(note, fullParams(dp(8)));
         setContentView(scroll);
+    }
+
+    private void showAuditMenu(View anchor) {
+        PopupMenu popup = new PopupMenu(this, anchor);
+        popup.getMenu().add("وضعیت بررسی");
+        popup.getMenu().add("آخرین پلاک‌های بررسی‌شده");
+        popup.setOnMenuItemClickListener(item -> {
+            String heading = item.getTitle().toString();
+            String message = heading.equals("وضعیت بررسی")
+                    ? overview.getText().toString() : recentList.getText().toString();
+            new AlertDialog.Builder(this).setTitle(heading).setMessage(message)
+                    .setPositiveButton("بستن", null).show();
+            return true;
+        });
+        popup.show();
     }
 
     private void refreshDashboard() {
