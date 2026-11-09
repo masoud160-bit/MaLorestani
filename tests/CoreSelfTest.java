@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 import java.nio.charset.StandardCharsets;
 
@@ -35,12 +36,15 @@ public final class CoreSelfTest {
             s2.add("001", "کمد");
             XlsxWriter.Sheet s3 = new XlsxWriter.Sheet("خارج از فهرست", "پلاک", "نام");
             s3.add("999", "رایانه");
+            XlsxWriter.Sheet s4 = new XlsxWriter.Sheet("مطابق", "پلاک", "نام ثبت‌شده", "زمان تأیید");
+            s4.add("00000008", "میز مدیریت", "2026/11/09 14:10");
             try (FileOutputStream output = new FileOutputStream(file)) {
-                XlsxWriter.write(output, Arrays.asList(s1, s2, s3));
+                XlsxWriter.write(output, Arrays.asList(s1, s2, s3, s4));
             }
             List<XlsxReader.SheetInfo> sheets = XlsxReader.inspect(file);
-            equal(3, sheets.size());
+            equal(4, sheets.size());
             equal("مغایرت نام", sheets.get(0).name);
+            equal("مطابق", sheets.get(3).name);
             List<List<String>> rows = XlsxReader.readRows(file, sheets.get(0));
             equal(3, rows.size());
             equal("00000123", rows.get(1).get(0));
@@ -48,11 +52,25 @@ public final class CoreSelfTest {
             equal("چراغ \"دیواری\"", rows.get(2).get(1));
             equal("001", XlsxReader.readRows(file, sheets.get(1)).get(1).get(0));
             equal("999", XlsxReader.readRows(file, sheets.get(2)).get(1).get(0));
+            equal("00000008", XlsxReader.readRows(file, sheets.get(3)).get(1).get(0));
+            equal("میز مدیریت", XlsxReader.readRows(file, sheets.get(3)).get(1).get(1));
+            try (ZipFile archive = new ZipFile(file)) {
+                String styles = new String(archive.getInputStream(archive.getEntry("xl/styles.xml")).readAllBytes(), StandardCharsets.UTF_8);
+                String report = new String(archive.getInputStream(archive.getEntry("xl/worksheets/sheet4.xml")).readAllBytes(), StandardCharsets.UTF_8);
+                if (!styles.contains("FF1C2A43") || !styles.contains("FFF0F5FB")
+                        || !styles.contains("numFmtId=\"49\"")) {
+                    throw new AssertionError("Expected styled report header and alternating row fill");
+                }
+                if (!report.contains("rightToLeft=\"1\"") || !report.contains("showGridLines=\"0\"")
+                        || !report.contains("<autoFilter") || !report.contains("FF20845A")) {
+                    throw new AssertionError("Expected RTL, gridless, filterable matched report");
+                }
+            }
         } finally {
             Files.deleteIfExists(file.toPath());
         }
         testSharedStringsAndNumberStyle();
-        System.out.println("PASS: normalization, three-sheet XLSX, Persian text, shared strings, padded numbers");
+        System.out.println("PASS: normalization, four-sheet styled XLSX, Persian text, shared strings, padded numbers");
     }
 
     private static void testSharedStringsAndNumberStyle() throws Exception {

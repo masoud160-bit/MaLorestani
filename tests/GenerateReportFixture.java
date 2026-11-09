@@ -11,8 +11,10 @@ public final class GenerateReportFixture {
         b.add("000124", "کمد");
         XlsxWriter.Sheet c = new XlsxWriter.Sheet("خارج از فهرست", "پلاک", "نام مشاهده‌شده", "زمان ثبت");
         c.add("000999", "تابلو", "2026/11/08 12:10");
+        XlsxWriter.Sheet d = new XlsxWriter.Sheet("مطابق", "پلاک", "نام ثبت‌شده", "زمان تأیید");
+        d.add("000125", "صندلی", "2026/11/08 12:20");
         try (FileOutputStream file = new FileOutputStream(args[0])) {
-            XlsxWriter.write(file, Arrays.asList(a, b, c));
+            XlsxWriter.write(file, Arrays.asList(a, b, c, d));
         }
     }
 }

@@ -149,6 +149,8 @@ public final class AuditDb extends SQLiteOpenHelper {
                 "پلاک", "نام ثبت‌شده");
         XlsxWriter.Sheet extra = new XlsxWriter.Sheet("خارج از فهرست",
                 "پلاک", "نام مشاهده‌شده", "زمان ثبت");
+        XlsxWriter.Sheet matched = new XlsxWriter.Sheet("مطابق",
+                "پلاک", "نام ثبت‌شده", "زمان تأیید");
         SQLiteDatabase db = getReadableDatabase();
         try (Cursor c = db.rawQuery("SELECT i.plate,i.name,o.observed_name,o.updated_at "
                 + "FROM observations o JOIN inventory i ON i.plate=o.plate "
@@ -164,7 +166,12 @@ public final class AuditDb extends SQLiteOpenHelper {
                 + "FROM observations WHERE status=3 ORDER BY plate", null)) {
             while (c.moveToNext()) extra.add(c.getString(0), c.getString(1), time(c.getLong(2)));
         }
-        return Arrays.asList(mismatch, missing, extra);
+        try (Cursor c = db.rawQuery("SELECT i.plate,i.name,o.updated_at "
+                + "FROM observations o JOIN inventory i ON i.plate=o.plate "
+                + "WHERE o.status=1 ORDER BY i.plate", null)) {
+            while (c.moveToNext()) matched.add(c.getString(0), c.getString(1), time(c.getLong(2)));
+        }
+        return Arrays.asList(mismatch, missing, extra, matched);
     }
 
     private static String time(long millis) {

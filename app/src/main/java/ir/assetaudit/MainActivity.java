@@ -193,7 +193,7 @@ public final class MainActivity extends Activity {
         LinearLayout fileCard = card(Color.WHITE);
         fileCard.addView(text("مدیریت فایل و گزارش‌ها", 16, NAVY, true));
         importButton = button("ورود فایل اکسل", BLUE);
-        exportButton = button("دریافت سه گزارش اکسل", NAVY);
+        exportButton = button("دریافت گزارش چهاربرگه‌ای اکسل", NAVY);
         fileCard.addView(importButton, fullParams(dp(8)));
         fileCard.addView(exportButton);
         root.addView(fileCard, cardParams());
@@ -533,8 +533,9 @@ public final class MainActivity extends Activity {
         if (busy) return;
         AuditDb.Counts c = database.counts();
         if (c.inventory == 0) { alert("ابتدا فهرست اثاثیه را وارد کنید."); return; }
-        new AlertDialog.Builder(this).setTitle("تهیهٔ سه گزارش")
-                .setMessage("مغایرت نام: " + c.mismatched + " مورد\n"
+        new AlertDialog.Builder(this).setTitle("تهیهٔ گزارش چهاربرگه‌ای")
+                .setMessage("مطابق: " + c.matched + " مورد\n"
+                        + "مغایرت نام: " + c.mismatched + " مورد\n"
                         + "پلاک‌های مشاهده‌نشده: " + c.unseen() + " مورد\n"
                         + "پلاک‌های خارج از فهرست: " + c.extra + " مورد\n\n"
                         + "اقلام مشاهده‌نشده فقط پس از پایان بازدید، نامزد بررسی مفقودی هستند.")
@@ -561,7 +562,7 @@ public final class MainActivity extends Activity {
                 onUi(() -> {
                     setBusy(false);
                     new AlertDialog.Builder(this).setTitle("گزارش ذخیره شد")
-                            .setMessage("یک فایل اکسل شامل سه برگهٔ «مغایرت نام»، «مشاهده‌نشده» و «خارج از فهرست» ذخیره شد.")
+                            .setMessage("یک فایل اکسل شامل چهار برگهٔ «مغایرت نام»، «مشاهده‌نشده»، «خارج از فهرست» و «مطابق» ذخیره شد.")
                             .setPositiveButton("متوجه شدم", null).show();
                 });
             } catch (Exception ex) {

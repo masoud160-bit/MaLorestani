@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-/** Minimal standards-compliant XLSX writer with three readable, RTL report sheets. */
+/** Standards-compliant XLSX writer with polished, filterable, RTL report sheets. */
 public final class XlsxWriter {
     private XlsxWriter() { }
 
@@ -87,14 +87,41 @@ public final class XlsxWriter {
     private static String styles() {
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
-                + "<fonts count=\"2\"><font><sz val=\"11\"/><name val=\"Arial\"/></font>"
-                + "<font><b/><sz val=\"11\"/><name val=\"Arial\"/></font></fonts>"
-                + "<fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill>"
-                + "<fill><patternFill patternType=\"gray125\"/></fill></fills>"
-                + "<borders count=\"1\"><border><left/><right/><top/><bottom/><diagonal/></border></borders>"
+                + "<fonts count=\"2\">"
+                + "<font><sz val=\"11\"/><name val=\"Arial\"/><color rgb=\"FF26364E\"/></font>"
+                + "<font><b/><sz val=\"11\"/><name val=\"Arial\"/><color rgb=\"FFFFFFFF\"/></font>"
+                + "</fonts>"
+                + "<fills count=\"4\">"
+                + "<fill><patternFill patternType=\"none\"/></fill>"
+                + "<fill><patternFill patternType=\"gray125\"/></fill>"
+                + "<fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF1C2A43\"/>"
+                + "<bgColor indexed=\"64\"/></patternFill></fill>"
+                + "<fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFF0F5FB\"/>"
+                + "<bgColor indexed=\"64\"/></patternFill></fill>"
+                + "</fills>"
+                + "<borders count=\"2\">"
+                + "<border><left/><right/><top/><bottom/><diagonal/></border>"
+                + "<border><left/><right/><top/><bottom style=\"thin\">"
+                + "<color rgb=\"FFB8C9DE\"/></bottom><diagonal/></border>"
+                + "</borders>"
                 + "<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>"
-                + "<cellXfs count=\"2\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>"
-                + "<xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/></cellXfs>"
+                + "<cellXfs count=\"5\">"
+                + "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyAlignment=\"1\">"
+                + "<alignment horizontal=\"right\" vertical=\"center\" wrapText=\"1\"/></xf>"
+                + "<xf numFmtId=\"0\" fontId=\"1\" fillId=\"2\" borderId=\"1\" xfId=\"0\""
+                + " applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\" applyAlignment=\"1\">"
+                + "<alignment horizontal=\"center\" vertical=\"center\"/></xf>"
+                + "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"3\" borderId=\"0\" xfId=\"0\""
+                + " applyFill=\"1\" applyAlignment=\"1\">"
+                + "<alignment horizontal=\"right\" vertical=\"center\" wrapText=\"1\"/></xf>"
+                + "<xf numFmtId=\"49\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\""
+                + " applyNumberFormat=\"1\" applyAlignment=\"1\">"
+                + "<alignment horizontal=\"right\" vertical=\"center\"/></xf>"
+                + "<xf numFmtId=\"49\" fontId=\"0\" fillId=\"3\" borderId=\"0\" xfId=\"0\""
+                + " applyNumberFormat=\"1\" applyFill=\"1\" applyAlignment=\"1\">"
+                + "<alignment horizontal=\"right\" vertical=\"center\"/></xf>"
+                + "</cellXfs>"
+                + "<cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles>"
                 + "</styleSheet>";
     }
 
@@ -103,19 +130,27 @@ public final class XlsxWriter {
         Writer w = new OutputStreamWriter(zip, StandardCharsets.UTF_8);
         w.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
-                + "<sheetViews><sheetView rightToLeft=\"1\" workbookViewId=\"0\">"
+                + "<sheetPr><tabColor rgb=\"" + tabColor(sheet.name) + "\"/></sheetPr>"
+                + "<sheetViews><sheetView rightToLeft=\"1\" showGridLines=\"0\" workbookViewId=\"0\">"
                 + "<pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/>"
-                + "</sheetView></sheetViews><sheetFormatPr defaultRowHeight=\"17\"/>"
-                + "<cols><col min=\"1\" max=\"1\" width=\"22\" customWidth=\"1\"/>"
-                + "<col min=\"2\" max=\"3\" width=\"36\" customWidth=\"1\"/>"
-                + "<col min=\"4\" max=\"4\" width=\"22\" customWidth=\"1\"/></cols><sheetData>");
+                + "</sheetView></sheetViews><sheetFormatPr defaultRowHeight=\"23\"/>"
+                + "<cols>");
+        List<String> headers = sheet.rows.get(0);
+        for (int c = 0; c < headers.size(); c++) {
+            String header = headers.get(c);
+            int width = header.contains("پلاک") ? 20 : header.contains("زمان") ? 24 : 44;
+            w.write("<col min=\"" + (c + 1) + "\" max=\"" + (c + 1)
+                    + "\" width=\"" + width + "\" customWidth=\"1\"/>");
+        }
+        w.write("</cols><sheetData>");
         for (int r = 0; r < sheet.rows.size(); r++) {
             List<String> row = sheet.rows.get(r);
-            w.write("<row r=\"" + (r + 1) + "\">");
+            w.write("<row r=\"" + (r + 1) + "\""
+                    + (r == 0 ? " ht=\"29\" customHeight=\"1\"" : "") + ">");
             for (int c = 0; c < row.size(); c++) {
-                w.write("<c r=\"" + columnName(c) + (r + 1) + "\" t=\"inlineStr\"");
-                if (r == 0) w.write(" s=\"1\"");
-                w.write("><is><t xml:space=\"preserve\">");
+                int style = r == 0 ? 1 : c == 0 ? (r % 2 == 0 ? 4 : 3) : (r % 2 == 0 ? 2 : 0);
+                w.write("<c r=\"" + columnName(c) + (r + 1) + "\" t=\"inlineStr\" s=\""
+                        + style + "\"><is><t xml:space=\"preserve\">");
                 w.write(escape(row.get(c)));
                 w.write("</t></is></c>");
             }
@@ -129,6 +164,14 @@ public final class XlsxWriter {
         w.write("</worksheet>");
         w.flush(); // The writer must not close the shared ZipOutputStream.
         zip.closeEntry();
+    }
+
+    private static String tabColor(String name) {
+        if ("مطابق".equals(name)) return "FF20845A";
+        if ("مغایرت نام".equals(name)) return "FFD39A35";
+        if ("مشاهده‌نشده".equals(name)) return "FF8A9BAF";
+        if ("خارج از فهرست".equals(name)) return "FFB94E4E";
+        return "FF265CA1";
     }
 
     private static String columnName(int number) {
