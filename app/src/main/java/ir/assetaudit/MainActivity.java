@@ -1,0 +1,650 @@
+package ir.assetaudit;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.ScrollView;
+import android.widget.Spinner;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public final class MainActivity extends Activity {
+    private static final int OPEN_XLSX = 100;
+    private static final int SAVE_REPORT = 101;
+    private static final int NAVY = Color.rgb(28, 42, 67);
+    private static final int BLUE = Color.rgb(39, 92, 161);
+    private static final int GREEN = Color.rgb(21, 124, 89);
+    private static final int ORANGE = Color.rgb(191, 107, 25);
+    private static final int RED = Color.rgb(173, 58, 54);
+    private static final int MUTED = Color.rgb(99, 114, 135);
+    private static final int MAX_IMPORT_BYTES = 25 * 1024 * 1024;
+
+    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final Handler ui = new Handler(Looper.getMainLooper());
+    private AuditDb database;
+    private TextView overview;
+    private TextView recentList;
+    private EditText plateInput;
+    private EditText actualInput;
+    private TextView foundTitle;
+    private TextView foundDescription;
+    private TextView previousObservation;
+    private LinearLayout resultPanel;
+    private Button matchedButton;
+    private Button mismatchButton;
+    private Button extraButton;
+    private Button removeButton;
+    private Button importButton;
+    private Button exportButton;
+    private Button lookupButton;
+    private ProgressBar loading;
+    private File pendingImport;
+    private String selectedPlate;
+    private AuditDb.Item selectedItem;
+    private boolean busy;
+
+    @Override protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        getWindow().setStatusBarColor(NAVY);
+        getWindow().setNavigationBarColor(Color.WHITE);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        database = new AuditDb(this);
+        buildScreen();
+        refreshDashboard();
+    }
+
+    private void buildScreen() {
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(Color.rgb(244, 247, 251));
+        scroll.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        LinearLayout root = vertical();
+        root.setPadding(dp(16), dp(16), dp(16), dp(30));
+        scroll.addView(root);
+
+        LinearLayout hero = card(NAVY);
+        TextView title = text("کنترل و تطبیق اثاثیه", 24, Color.WHITE, true);
+        hero.addView(title);
+        TextView subtitle = text("انبارگردانی پلاک‌محور • بدون اینترنت", 13, Color.rgb(205, 220, 241), false);
+        subtitle.setPadding(0, dp(7), 0, 0);
+        hero.addView(subtitle);
+        root.addView(hero, cardParams());
+
+        LinearLayout summaryCard = card(Color.WHITE);
+        summaryCard.addView(text("وضعیت بررسی", 18, NAVY, true));
+        overview = text("", 14, MUTED, false);
+        overview.setLineSpacing(dp(5), 1f);
+        overview.setPadding(0, dp(10), 0, 0);
+        summaryCard.addView(overview);
+        root.addView(summaryCard, cardParams());
+
+        importButton = button("۱. ورود فایل اکسل", BLUE);
+        exportButton = button("۳. دریافت سه گزارش اکسل", NAVY);
+        root.addView(importButton, cardParams());
+        root.addView(exportButton, cardParams());
+        importButton.setOnClickListener(v -> openExcelPicker());
+        exportButton.setOnClickListener(v -> confirmExport());
+
+        loading = new ProgressBar(this);
+        loading.setIndeterminate(true);
+        loading.setVisibility(View.GONE);
+        root.addView(loading, cardParams());
+
+        LinearLayout lookupCard = card(Color.WHITE);
+        lookupCard.addView(text("۲. بررسی پلاک مشاهده‌شده", 18, NAVY, true));
+        TextView help = text("پلاک روی اثاثیه را وارد کنید. صفرهای ابتدای پلاک حفظ می‌شوند.", 13, MUTED, false);
+        help.setPadding(0, dp(6), 0, dp(10));
+        lookupCard.addView(help);
+        plateInput = entry("شماره پلاک اثاثیه");
+        plateInput.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+        plateInput.setSingleLine(true);
+        lookupCard.addView(plateInput, fullParams(dp(10)));
+        lookupButton = button("جست‌وجوی پلاک", BLUE);
+        lookupCard.addView(lookupButton);
+        lookupButton.setOnClickListener(v -> searchPlate());
+        plateInput.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) { searchPlate(); return true; }
+            return false;
+        });
+        root.addView(lookupCard, cardParams());
+
+        resultPanel = card(Color.WHITE);
+        foundTitle = text("", 19, NAVY, true);
+        foundDescription = text("", 15, NAVY, false);
+        foundDescription.setPadding(0, dp(10), 0, dp(10));
+        previousObservation = text("", 13, ORANGE, false);
+        previousObservation.setVisibility(View.GONE);
+        previousObservation.setPadding(0, 0, 0, dp(9));
+        resultPanel.addView(foundTitle);
+        resultPanel.addView(foundDescription);
+        resultPanel.addView(previousObservation);
+        actualInput = entry("نام واقعی اثاثیه مشاهده‌شده را بنویسید");
+        actualInput.setSingleLine(false);
+        actualInput.setMinLines(1);
+        actualInput.setMaxLines(3);
+        resultPanel.addView(actualInput, fullParams(dp(10)));
+        matchedButton = button("تأیید: نام اثاثیه مطابق است", GREEN);
+        mismatchButton = button("ثبت مغایرت نام اثاثیه", ORANGE);
+        extraButton = button("ثبت پلاک خارج از فهرست", RED);
+        removeButton = button("حذف ثبت قبلی این پلاک", MUTED);
+        resultPanel.addView(matchedButton, fullParams(dp(8)));
+        resultPanel.addView(mismatchButton, fullParams(dp(8)));
+        resultPanel.addView(extraButton, fullParams(dp(8)));
+        resultPanel.addView(removeButton);
+        matchedButton.setOnClickListener(v -> submitObservation(AuditDb.MATCH));
+        mismatchButton.setOnClickListener(v -> submitObservation(AuditDb.MISMATCH));
+        extraButton.setOnClickListener(v -> submitObservation(AuditDb.EXTRA));
+        removeButton.setOnClickListener(v -> confirmRemove());
+        resultPanel.setVisibility(View.GONE);
+        root.addView(resultPanel, cardParams());
+
+        LinearLayout recentCard = card(Color.WHITE);
+        recentCard.addView(text("آخرین پلاک‌های بررسی‌شده", 17, NAVY, true));
+        recentList = text("", 14, MUTED, false);
+        recentList.setLineSpacing(dp(5), 1.0f);
+        recentList.setPadding(0, dp(10), 0, 0);
+        recentCard.addView(recentList);
+        root.addView(recentCard, cardParams());
+
+        TextView note = text("نکته: تا پایان بازدید، «مشاهده‌نشده» به معنی مفقود بودن قطعی نیست. "
+                + "اطلاعات روی همین دستگاه ذخیره می‌شود و با ورود فهرست جدید، پس از تأیید شما، "
+                + "نتایج قبلی پاک می‌شود؛ بنابراین ابتدا گزارش بگیرید.", 12, MUTED, false);
+        root.addView(note, fullParams(dp(8)));
+        setContentView(scroll);
+    }
+
+    private void refreshDashboard() {
+        AuditDb.Counts c = database.counts();
+        overview.setText("کل پلاک‌های فهرست: " + c.inventory
+                + "     |     بررسی‌شده از فهرست: " + (c.matched + c.mismatched)
+                + "\nمطابق: " + c.matched + "     |     مغایرت نام: " + c.mismatched
+                + "\nپلاک خارج از فهرست: " + c.extra + "     |     مشاهده‌نشده: " + c.unseen());
+        List<AuditDb.Observation> recent = database.recent(8);
+        if (recent.isEmpty()) {
+            recentList.setText("هنوز پلاکی ثبت نشده است.");
+        } else {
+            StringBuilder list = new StringBuilder();
+            for (AuditDb.Observation o : recent) {
+                if (list.length() > 0) list.append('\n');
+                list.append("• ").append(o.plate).append(" — ");
+                list.append(o.status == AuditDb.MATCH ? "مطابق" :
+                        o.status == AuditDb.MISMATCH ? "مغایرت نام" : "خارج از فهرست");
+            }
+            recentList.setText(list.toString());
+        }
+        exportButton.setEnabled(!busy && c.inventory > 0);
+    }
+
+    private void searchPlate() {
+        if (busy) return;
+        if (database.counts().inventory == 0) {
+            alert("ابتدا فایل اکسل اثاثیه را وارد کنید.");
+            return;
+        }
+        String plate = PlateNormalizer.normalize(plateInput.getText().toString());
+        if (plate.isEmpty()) { plateInput.setError("پلاک را وارد کنید."); return; }
+        selectedPlate = plate;
+        selectedItem = database.lookup(plate);
+        AuditDb.Observation previous = database.observation(plate);
+        if (selectedItem == null) {
+            foundTitle.setText("پلاک «" + plate + "» در اکسل وجود ندارد");
+            foundTitle.setTextColor(RED);
+            foundDescription.setText("اگر پلاک را درست خوانده‌اید، نام اثاثیه را وارد و ثبت کنید.");
+            matchedButton.setVisibility(View.GONE);
+            mismatchButton.setVisibility(View.GONE);
+            extraButton.setVisibility(View.VISIBLE);
+        } else {
+            foundTitle.setText("پلاک «" + plate + "» پیدا شد");
+            foundTitle.setTextColor(GREEN);
+            foundDescription.setText("نام ثبت‌شده در اکسل:\n" + selectedItem.name
+                    + "\n\nاگر این نام صحیح است، تأیید کنید؛ در غیر این صورت نام واقعی را بنویسید.");
+            matchedButton.setVisibility(View.VISIBLE);
+            mismatchButton.setVisibility(View.VISIBLE);
+            extraButton.setVisibility(View.GONE);
+        }
+        actualInput.setText(previous == null || previous.status == AuditDb.MATCH ? "" : previous.observedName);
+        previousObservation.setVisibility(previous == null ? View.GONE : View.VISIBLE);
+        removeButton.setVisibility(previous == null ? View.GONE : View.VISIBLE);
+        if (previous != null) previousObservation.setText("این پلاک قبلاً ثبت شده است. ثبت جدید، نتیجهٔ قبلی را اصلاح می‌کند.");
+        resultPanel.setVisibility(View.VISIBLE);
+    }
+
+    private void submitObservation(int status) {
+        if (busy || selectedPlate == null) return;
+        String observed = actualInput.getText().toString().trim();
+        if (status != AuditDb.MATCH && observed.isEmpty()) {
+            actualInput.setError("نام واقعی اثاثیه را وارد کنید.");
+            actualInput.requestFocus();
+            return;
+        }
+        String plate = selectedPlate;
+        String value = status == AuditDb.MATCH ? selectedItem.name : observed;
+        try {
+            database.record(plate, value, status);
+            Toast.makeText(this, "ثبت شد: " + plate, Toast.LENGTH_SHORT).show();
+            plateInput.setText("");
+            actualInput.setText("");
+            selectedPlate = null;
+            selectedItem = null;
+            resultPanel.setVisibility(View.GONE);
+            plateInput.requestFocus();
+            refreshDashboard();
+        } catch (Exception ex) { alert("ثبت ناموفق بود: " + ex.getMessage()); }
+    }
+
+    private void confirmRemove() {
+        if (selectedPlate == null) return;
+        String plate = selectedPlate;
+        new AlertDialog.Builder(this).setTitle("حذف مشاهدهٔ قبلی")
+                .setMessage("ثبت قبلی پلاک «" + plate + "» حذف شود؟ می‌توانید بعداً دوباره آن را بررسی کنید.")
+                .setNegativeButton("انصراف", null)
+                .setPositiveButton("حذف ثبت", (d, w) -> {
+                    database.removeObservation(plate);
+                    selectedPlate = null;
+                    selectedItem = null;
+                    resultPanel.setVisibility(View.GONE);
+                    plateInput.setText("");
+                    refreshDashboard();
+                }).show();
+    }
+
+    private void openExcelPicker() {
+        if (busy) return;
+        Intent open = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        open.addCategory(Intent.CATEGORY_OPENABLE);
+        open.setType("*/*");
+        open.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "application/octet-stream", "application/zip"});
+        startActivityForResult(open, OPEN_XLSX);
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent intent) {
+        super.onActivityResult(requestCode, resultCode, intent);
+        if (resultCode != RESULT_OK || intent == null || intent.getData() == null) return;
+        Uri uri = intent.getData();
+        if (requestCode == OPEN_XLSX) prepareImport(uri);
+        else if (requestCode == SAVE_REPORT) writeReport(uri);
+    }
+
+    private void prepareImport(Uri uri) {
+        discardPendingImport();
+        setBusy(true);
+        worker.execute(() -> {
+            File temp = null;
+            try {
+                temp = File.createTempFile("asset_inventory_", ".xlsx", getCacheDir());
+                try (InputStream in = getContentResolver().openInputStream(uri);
+                     OutputStream out = new FileOutputStream(temp)) {
+                    if (in == null) throw new IOException("فایل انتخاب‌شده باز نشد.");
+                    byte[] buffer = new byte[8192];
+                    int count;
+                    int total = 0;
+                    while ((count = in.read(buffer)) >= 0) {
+                        total += count;
+                        if (total > MAX_IMPORT_BYTES) throw new IOException("حجم فایل نباید بیشتر از ۲۵ مگابایت باشد.");
+                        out.write(buffer, 0, count);
+                    }
+                }
+                List<XlsxReader.SheetInfo> sheets = XlsxReader.inspect(temp);
+                File selected = temp;
+                onUi(() -> {
+                    pendingImport = selected;
+                    setBusy(false);
+                    if (sheets.size() == 1) {
+                        loadSheet(selected, sheets.get(0));
+                        return;
+                    }
+                    String[] names = new String[sheets.size()];
+                    for (int i = 0; i < sheets.size(); i++) names[i] = sheets.get(i).name;
+                    new AlertDialog.Builder(this).setTitle("برگهٔ فهرست اثاثیه را انتخاب کنید")
+                            .setItems(names, (dialog, index) -> loadSheet(selected, sheets.get(index)))
+                            .setNegativeButton("انصراف", (dialog, which) -> discardPendingImport()).show();
+                });
+            } catch (Exception ex) {
+                if (temp != null) temp.delete();
+                String message = ex.getMessage();
+                onUi(() -> {
+                    setBusy(false);
+                    alert("فایل خوانده نشد. فرمت موردنیاز، اکسل جدید با پسوند xlsx است.\n\n" + message);
+                });
+            }
+        });
+    }
+
+    private void loadSheet(File file, XlsxReader.SheetInfo sheet) {
+        setBusy(true);
+        worker.execute(() -> {
+            try {
+                List<List<String>> rows = XlsxReader.readRows(file, sheet);
+                onUi(() -> { setBusy(false); selectHeader(rows); });
+            } catch (Exception ex) {
+                onUi(() -> { setBusy(false); alert("برگه خوانده نشد: " + ex.getMessage()); });
+            }
+        });
+    }
+
+    private void selectHeader(List<List<String>> rows) {
+        AssetImportMapping.Mapping mapping = AssetImportMapping.detect(rows);
+        if (mapping != null) {
+            new AlertDialog.Builder(this)
+                    .setTitle("ستون‌های گزارش اموال شناسایی شد")
+                    .setMessage("ستون پلاک: «پلاک اموال» (شمارهٔ " + (mapping.plateColumn + 1)
+                            + ")\nستون نام: «عنوان کالا» (شمارهٔ " + (mapping.nameColumn + 1)
+                            + ")\n\nآیا با همین ستون‌ها فهرست را وارد کنیم؟")
+                    .setPositiveButton("ادامه با این ستون‌ها", (dialog, which) ->
+                            validateImport(rows, mapping.headerRow + 1,
+                                    mapping.plateColumn, mapping.nameColumn))
+                    .setNeutralButton("انتخاب دستی", (dialog, which) -> selectHeaderManually(rows))
+                    .setNegativeButton("انصراف", null).show();
+            return;
+        }
+        selectHeaderManually(rows);
+    }
+
+    private void selectHeaderManually(List<List<String>> rows) {
+        int choices = Math.min(5, rows.size());
+        String[] names = new String[choices + 1];
+        names[0] = "بدون سطر عنوان (داده از سطر اول)";
+        for (int i = 0; i < choices; i++) {
+            StringBuilder preview = new StringBuilder();
+            int max = Math.min(3, rows.get(i).size());
+            for (int j = 0; j < max; j++) {
+                if (preview.length() > 0) preview.append(" | ");
+                preview.append(rows.get(i).get(j));
+            }
+            names[i + 1] = "سطر " + (i + 1) + ": " + trim(preview.toString(), 65);
+        }
+        new AlertDialog.Builder(this).setTitle("سطر عنوان ستون‌ها را مشخص کنید")
+                .setItems(names, (d, chosen) -> chooseColumns(rows, chosen - 1))
+                .setNegativeButton("انصراف", null).show();
+    }
+
+    private void chooseColumns(List<List<String>> rows, int headerIndex) {
+        int max = 0;
+        for (int r = 0; r < Math.min(rows.size(), 10); r++) max = Math.max(max, rows.get(r).size());
+        if (max < 2) { alert("حداقل دو ستون برای پلاک و نام اثاثیه لازم است."); return; }
+        String[] headers = new String[max];
+        String[] labels = new String[max];
+        for (int i = 0; i < max; i++) {
+            headers[i] = headerIndex >= 0 && i < rows.get(headerIndex).size() ? rows.get(headerIndex).get(i) : "";
+            labels[i] = "ستون " + (i + 1) + (headers[i].isEmpty() ? "" : " — " + trim(headers[i], 40));
+        }
+        LinearLayout form = vertical();
+        form.setPadding(dp(18), dp(12), dp(18), dp(6));
+        form.addView(text("ستون شماره پلاک", 15, NAVY, true));
+        Spinner plateColumn = selector(labels);
+        form.addView(plateColumn, fullParams(dp(10)));
+        form.addView(text("ستون نام / شرح اثاثیه", 15, NAVY, true));
+        Spinner nameColumn = selector(labels);
+        form.addView(nameColumn);
+        plateColumn.setSelection(guess(headers, new String[]{"پلاک", "شماره", "کد", "plate", "tag"}, 0));
+        nameColumn.setSelection(guess(headers, new String[]{"عنوان کالا", "نام کالا", "نام اثاثیه",
+                "شرح کالا", "نام", "شرح", "عنوان", "اثاثیه", "name", "description"}, 1));
+        new AlertDialog.Builder(this).setTitle("ستون‌های فایل اکسل")
+                .setView(form).setNegativeButton("انصراف", null)
+                .setPositiveButton("بررسی فهرست", (d, which) -> {
+                    int plate = plateColumn.getSelectedItemPosition();
+                    int name = nameColumn.getSelectedItemPosition();
+                    if (plate == name) { alert("ستون پلاک و نام باید متفاوت باشند."); return; }
+                    validateImport(rows, headerIndex + 1, plate, name);
+                }).show();
+    }
+
+    private void validateImport(List<List<String>> rows, int begin, int plateCol, int nameCol) {
+        setBusy(true);
+        worker.execute(() -> {
+            try {
+                Set<String> seen = new HashSet<>();
+                List<AuditDb.Item> items = new ArrayList<>();
+                for (int i = begin; i < rows.size(); i++) {
+                    List<String> row = rows.get(i);
+                    String plate = PlateNormalizer.normalize(value(row, plateCol));
+                    String name = value(row, nameCol).trim();
+                    if (plate.isEmpty()) continue;
+                    if (name.isEmpty()) throw new IOException("نام اثاثیه برای پلاک «" + plate + "» خالی است (سطر " + (i + 1) + ").");
+                    if (!seen.add(plate)) throw new IOException("پلاک تکراری در اکسل: " + plate + " (سطر " + (i + 1) + ").");
+                    items.add(new AuditDb.Item(plate, name));
+                }
+                if (items.isEmpty()) throw new IOException("هیچ پلاک معتبری در ستون انتخاب‌شده وجود ندارد.");
+                onUi(() -> {
+                    setBusy(false);
+                    confirmNewInventory(items);
+                });
+            } catch (Exception ex) {
+                onUi(() -> { setBusy(false); alert("فهرست وارد نشد: " + ex.getMessage()); });
+            }
+        });
+    }
+
+    private void confirmNewInventory(List<AuditDb.Item> items) {
+        AuditDb.Counts old = database.counts();
+        String warning = old.inventory > 0
+                ? "\n\nتوجه: فهرست فعلی و همهٔ " + (old.matched + old.mismatched + old.extra)
+                + " نتیجهٔ ثبت‌شده جایگزین می‌شوند. اگر لازم است، پیش از ادامه گزارش بگیرید."
+                : "";
+        new AlertDialog.Builder(this).setTitle("تأیید ورود فهرست")
+                .setMessage(items.size() + " پلاک معتبر شناسایی شد." + warning)
+                .setNegativeButton("انصراف", null)
+                .setPositiveButton("تأیید و شروع", (dialog, which) -> {
+                    setBusy(true);
+                    worker.execute(() -> {
+                        try {
+                            database.replaceInventory(items);
+                            onUi(() -> {
+                                setBusy(false);
+                                selectedPlate = null;
+                                selectedItem = null;
+                                plateInput.setText("");
+                                resultPanel.setVisibility(View.GONE);
+                                refreshDashboard();
+                                discardPendingImport();
+                                Toast.makeText(this, "فهرست جدید آمادهٔ کنترل است.", Toast.LENGTH_LONG).show();
+                            });
+                        } catch (Exception ex) {
+                            onUi(() -> { setBusy(false); alert("خطا در ذخیرهٔ فهرست: " + ex.getMessage()); });
+                        }
+                    });
+                }).show();
+    }
+
+    private void confirmExport() {
+        if (busy) return;
+        AuditDb.Counts c = database.counts();
+        if (c.inventory == 0) { alert("ابتدا فهرست اثاثیه را وارد کنید."); return; }
+        new AlertDialog.Builder(this).setTitle("تهیهٔ سه گزارش")
+                .setMessage("مغایرت نام: " + c.mismatched + " مورد\n"
+                        + "پلاک‌های مشاهده‌نشده: " + c.unseen() + " مورد\n"
+                        + "پلاک‌های خارج از فهرست: " + c.extra + " مورد\n\n"
+                        + "اقلام مشاهده‌نشده فقط پس از پایان بازدید، نامزد بررسی مفقودی هستند.")
+                .setNegativeButton("انصراف", null)
+                .setPositiveButton("انتخاب محل ذخیره", (dialog, which) -> {
+                    Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                    save.addCategory(Intent.CATEGORY_OPENABLE);
+                    save.setType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                    save.putExtra(Intent.EXTRA_TITLE, "AssetAudit_" +
+                            new SimpleDateFormat("yyyyMMdd_HHmm", Locale.ROOT).format(new Date()) + ".xlsx");
+                    startActivityForResult(save, SAVE_REPORT);
+                }).show();
+    }
+
+    private void writeReport(Uri destination) {
+        setBusy(true);
+        worker.execute(() -> {
+            try {
+                List<XlsxWriter.Sheet> reports = database.reports();
+                try (OutputStream stream = getContentResolver().openOutputStream(destination, "w")) {
+                    if (stream == null) throw new IOException("محل ذخیره باز نشد.");
+                    XlsxWriter.write(stream, reports);
+                }
+                onUi(() -> {
+                    setBusy(false);
+                    new AlertDialog.Builder(this).setTitle("گزارش ذخیره شد")
+                            .setMessage("یک فایل اکسل شامل سه برگهٔ «مغایرت نام»، «مشاهده‌نشده» و «خارج از فهرست» ذخیره شد.")
+                            .setPositiveButton("متوجه شدم", null).show();
+                });
+            } catch (Exception ex) {
+                onUi(() -> { setBusy(false); alert("ذخیرهٔ گزارش ناموفق بود: " + ex.getMessage()); });
+            }
+        });
+    }
+
+    private static String value(List<String> row, int index) {
+        return index >= 0 && index < row.size() ? row.get(index) : "";
+    }
+
+    private void discardPendingImport() {
+        if (pendingImport != null) {
+            pendingImport.delete();
+            pendingImport = null;
+        }
+    }
+
+    private static String trim(String value, int length) {
+        return value.length() <= length ? value : value.substring(0, length) + "…";
+    }
+
+    private static int guess(String[] names, String[] keywords, int fallback) {
+        for (String keyword : keywords) {
+            for (int i = 0; i < names.length; i++) {
+                if (names[i].toLowerCase(Locale.ROOT).contains(keyword)) return i;
+            }
+        }
+        return Math.min(fallback, names.length - 1);
+    }
+
+    private void setBusy(boolean isBusy) {
+        busy = isBusy;
+        loading.setVisibility(isBusy ? View.VISIBLE : View.GONE);
+        importButton.setEnabled(!isBusy);
+        lookupButton.setEnabled(!isBusy);
+        matchedButton.setEnabled(!isBusy);
+        mismatchButton.setEnabled(!isBusy);
+        extraButton.setEnabled(!isBusy);
+        removeButton.setEnabled(!isBusy);
+        exportButton.setEnabled(!isBusy && database.counts().inventory > 0);
+    }
+
+    private void onUi(Runnable callback) { ui.post(() -> { if (!isFinishing() && !isDestroyed()) callback.run(); }); }
+
+    private void alert(String message) {
+        new AlertDialog.Builder(this).setTitle("کنترل اثاثیه")
+                .setMessage(message == null ? "خطای نامشخص" : message)
+                .setPositiveButton("بستن", null).show();
+    }
+
+    private LinearLayout vertical() {
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        return layout;
+    }
+
+    private LinearLayout card(int color) {
+        LinearLayout view = vertical();
+        view.setPadding(dp(17), dp(17), dp(17), dp(17));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(color);
+        background.setCornerRadius(dp(14));
+        view.setBackground(background);
+        view.setElevation(dp(2));
+        return view;
+    }
+
+    private TextView text(String value, int sp, int color, boolean bold) {
+        TextView view = new TextView(this);
+        view.setText(value);
+        view.setTextColor(color);
+        view.setTextSize(sp);
+        view.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        view.setTextDirection(View.TEXT_DIRECTION_RTL);
+        if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        return view;
+    }
+
+    private EditText entry(String hint) {
+        EditText input = new EditText(this);
+        input.setTextSize(17);
+        input.setHint(hint);
+        input.setTextColor(NAVY);
+        input.setHintTextColor(MUTED);
+        input.setTextDirection(View.TEXT_DIRECTION_RTL);
+        input.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        input.setPadding(dp(13), dp(9), dp(13), dp(9));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.rgb(247, 250, 254));
+        background.setCornerRadius(dp(9));
+        background.setStroke(dp(1), Color.rgb(201, 213, 228));
+        input.setBackground(background);
+        return input;
+    }
+
+    private Button button(String caption, int color) {
+        Button button = new Button(this);
+        button.setAllCaps(false);
+        button.setText(caption);
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(15);
+        button.setMinHeight(dp(48));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(color);
+        background.setCornerRadius(dp(10));
+        button.setBackground(background);
+        return button;
+    }
+
+    private Spinner selector(String[] labels) {
+        Spinner spinner = new Spinner(this);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, labels);
+        spinner.setAdapter(adapter);
+        spinner.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        return spinner;
+    }
+
+    private LinearLayout.LayoutParams cardParams() { return fullParams(dp(12)); }
+
+    private LinearLayout.LayoutParams fullParams(int bottomMargin) {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        p.bottomMargin = bottomMargin;
+        return p;
+    }
+
+    private int dp(int value) { return Math.round(getResources().getDisplayMetrics().density * value); }
+
+    @Override protected void onDestroy() {
+        worker.shutdown();
+        super.onDestroy();
+    }
+}
