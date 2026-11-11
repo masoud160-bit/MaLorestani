@@ -46,18 +46,18 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity {
     private static final int OPEN_XLSX = 100;
     private static final int SAVE_REPORT = 101;
-    // Trading-system dark palette: preserve clear emphasis on fast plate verification.
-    private static final int BACKGROUND = Color.rgb(5, 6, 8);       // #050608
-    private static final int NAVY = Color.rgb(13, 17, 23);          // #0D1117
-    private static final int PANEL = Color.rgb(13, 17, 23);         // #0D1117
-    private static final int PANEL_ALT = Color.rgb(22, 27, 34);     // #161B22
-    private static final int BORDER = Color.rgb(32, 36, 43);        // #20242B
-    private static final int TEXT = Color.rgb(240, 246, 252);       // #F0F6FC
-    private static final int BLUE = Color.rgb(22, 139, 255);        // #168BFF
-    private static final int GREEN = Color.rgb(43, 213, 118);       // #2BD576
-    private static final int ORANGE = Color.rgb(245, 166, 35);      // contextual amber
-    private static final int RED = Color.rgb(255, 91, 87);          // #FF5B57
-    private static final int MUTED = Color.rgb(139, 148, 158);      // #8B949E
+    // Classic graphite and muted cobalt palette — approved design option 2.
+    private static final int BACKGROUND = Color.rgb(13, 17, 23); // #0D1117
+    private static final int NAVY = Color.rgb(21, 26, 33); // #151A21
+    private static final int PANEL = Color.rgb(27, 34, 43); // #1B222B
+    private static final int PANEL_ALT = Color.rgb(34, 44, 56); // #222C38
+    private static final int BORDER = Color.rgb(53, 67, 84); // #354354
+    private static final int TEXT = Color.rgb(237, 242, 247); // #EDF2F7
+    private static final int BLUE = Color.rgb(59, 105, 165); // #3B69A5
+    private static final int GREEN = Color.rgb(52, 134, 92); // #34865C
+    private static final int ORANGE = Color.rgb(214, 160, 76); // restrained gold #D6A04C
+    private static final int RED = Color.rgb(171, 100, 100); // #AB6464
+    private static final int MUTED = Color.rgb(164, 175, 190); // #A4AFBE
     private static final int MAX_IMPORT_BYTES = 25 * 1024 * 1024;
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -117,7 +117,7 @@ public final class MainActivity extends Activity {
         menuButton.setGravity(Gravity.CENTER);
         menuButton.setContentDescription("منوی وضعیت بررسی و سابقهٔ پلاک‌ها");
         GradientDrawable menuBackground = new GradientDrawable();
-        menuBackground.setColor(PANEL_ALT);
+        menuBackground.setColor(NAVY);
         menuBackground.setStroke(dp(1), BORDER);
         menuBackground.setCornerRadius(dp(9));
         menuButton.setBackground(menuBackground);
@@ -366,7 +366,10 @@ public final class MainActivity extends Activity {
                         database.markForReview(plate, oldNote, survey.getText().toString());
                         updateFlagControls();
                         refreshDashboard();
-                        Toast.makeText(this, "شماره آمایش و علامت ذخیره شد", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, "علامت ثبت شد؛ وضعیت مشاهده تغییر نکرد.", Toast.LENGTH_SHORT).show();
+                        // The user may type the next plate immediately; flagged items
+                        // are not silently counted as matched.
+                        focusNextPlate();
                     } catch (Exception error) {
                         alert("ثبت انجام نشد: " + error.getMessage());
                     }
@@ -381,6 +384,7 @@ public final class MainActivity extends Activity {
                             database.unmarkForReview(plate);
                             updateFlagControls();
                             refreshDashboard();
+                            focusNextPlate();
                         }).show();
             });
         }
@@ -400,15 +404,13 @@ public final class MainActivity extends Activity {
         try {
             database.record(plate, value, status);
             Toast.makeText(this, "ثبت شد: " + plate, Toast.LENGTH_SHORT).show();
-            plateInput.setText("");
             actualInput.setText("");
             selectedPlate = null;
             selectedItem = null;
             resultPanel.setVisibility(View.GONE);
             hideKeyboard(actualInput);
-            plateInput.requestFocus();
-            screenScroll.post(() -> screenScroll.smoothScrollTo(0, 0));
             refreshDashboard();
+            focusNextPlate();
         } catch (Exception ex) { alert("ثبت ناموفق بود: " + ex.getMessage()); }
     }
 
@@ -425,6 +427,7 @@ public final class MainActivity extends Activity {
                     resultPanel.setVisibility(View.GONE);
                     plateInput.setText("");
                     refreshDashboard();
+                    focusNextPlate();
                 }).show();
     }
 
@@ -718,6 +721,30 @@ public final class MainActivity extends Activity {
                 .setPositiveButton("بستن", null).show();
     }
 
+    /** Move directly to the next plate after a successful record operation.
+     *  Delay the IME request until the current dialog/button tap has finished.
+     *  Do not call this for validation failures or cancelled dialogs.
+     */
+    private void focusNextPlate() {
+        plateInput.setText("");
+        plateInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+        plateInput.setSingleLine(true);
+        plateInput.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+        screenScroll.post(() -> {
+            if (isFinishing() || isDestroyed() || busy) return;
+            plateInput.requestFocus();
+            screenScroll.scrollTo(0, 0);
+            plateInput.postDelayed(() -> {
+                if (isFinishing() || isDestroyed() || busy || !plateInput.hasFocus()) return;
+                InputMethodManager keyboard = (InputMethodManager)
+                        getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (keyboard != null) {
+                    keyboard.showSoftInput(plateInput, InputMethodManager.SHOW_IMPLICIT);
+                }
+            }, 220);
+        });
+    }
+
     private void hideKeyboard(View input) {
         InputMethodManager keyboard = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         if (keyboard != null) keyboard.hideSoftInputFromWindow(input.getWindowToken(), 0);
@@ -739,7 +766,7 @@ public final class MainActivity extends Activity {
         background.setCornerRadius(dp(14));
         background.setStroke(dp(1), BORDER);
         view.setBackground(background);
-        view.setElevation(dp(1));
+        view.setElevation(0f);
         return view;
     }
 
@@ -775,13 +802,15 @@ public final class MainActivity extends Activity {
         Button button = new Button(this);
         button.setAllCaps(false);
         button.setText(caption);
-        button.setTextColor(BACKGROUND);
+        button.setTextColor(color == ORANGE ? BACKGROUND : TEXT);
         button.setTextSize(15);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         button.setMinHeight(dp(48));
         GradientDrawable background = new GradientDrawable();
         background.setColor(color);
-        background.setCornerRadius(dp(10));
+        background.setCornerRadius(dp(9));
         button.setBackground(background);
+        button.setElevation(0f);
         return button;
     }
 
