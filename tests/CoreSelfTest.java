@@ -38,13 +38,18 @@ public final class CoreSelfTest {
             s3.add("999", "رایانه");
             XlsxWriter.Sheet s4 = new XlsxWriter.Sheet("مطابق", "پلاک", "نام ثبت‌شده", "زمان تأیید");
             s4.add("00000008", "میز مدیریت", "2026/11/09 14:10");
+            XlsxWriter.Sheet s5 = new XlsxWriter.Sheet("بررسی فرسودگی", "پلاک", "شماره آمایش", "نام ثبت‌شده",
+                    "وضعیت بررسی", "نام مشاهده‌شده", "تاریخ علامت‌گذاری");
+            s5.add("00000008", "00001234", "میز مدیریت", "مطابق", "میز مدیریت", "2026/11/12 10:00");
+            s5.add("00000009", "12345678901234567890", "پرینتر", "مشاهده‌نشده", "", "2026/11/12 10:01");
             try (FileOutputStream output = new FileOutputStream(file)) {
-                XlsxWriter.write(output, Arrays.asList(s1, s2, s3, s4));
+                XlsxWriter.write(output, Arrays.asList(s1, s2, s3, s4, s5));
             }
             List<XlsxReader.SheetInfo> sheets = XlsxReader.inspect(file);
-            equal(4, sheets.size());
+            equal(5, sheets.size());
             equal("مغایرت نام", sheets.get(0).name);
             equal("مطابق", sheets.get(3).name);
+            equal("بررسی فرسودگی", sheets.get(4).name);
             List<List<String>> rows = XlsxReader.readRows(file, sheets.get(0));
             equal(3, rows.size());
             equal("00000123", rows.get(1).get(0));
@@ -54,13 +59,39 @@ public final class CoreSelfTest {
             equal("999", XlsxReader.readRows(file, sheets.get(2)).get(1).get(0));
             equal("00000008", XlsxReader.readRows(file, sheets.get(3)).get(1).get(0));
             equal("میز مدیریت", XlsxReader.readRows(file, sheets.get(3)).get(1).get(1));
+            equal("00000008", XlsxReader.readRows(file, sheets.get(4)).get(1).get(0));
+            equal(6, XlsxReader.readRows(file, sheets.get(4)).get(0).size());
+            equal("شماره آمایش", XlsxReader.readRows(file, sheets.get(4)).get(0).get(1));
+            equal("00001234", XlsxReader.readRows(file, sheets.get(4)).get(1).get(1));
+            equal("12345678901234567890", XlsxReader.readRows(file, sheets.get(4)).get(2).get(1));
+            equal("2026/11/12 10:00", XlsxReader.readRows(file, sheets.get(4)).get(1).get(5));
+            equal("مطابق", XlsxReader.readRows(file, sheets.get(4)).get(1).get(3));
             try (ZipFile archive = new ZipFile(file)) {
                 String styles = new String(archive.getInputStream(archive.getEntry("xl/styles.xml")).readAllBytes(), StandardCharsets.UTF_8);
                 String report = new String(archive.getInputStream(archive.getEntry("xl/worksheets/sheet4.xml")).readAllBytes(), StandardCharsets.UTF_8);
-                if (!styles.contains("FF1C2A43") || !styles.contains("FFF0F5FB")
+                String flaggedReport = new String(archive.getInputStream(archive.getEntry("xl/worksheets/sheet5.xml")).readAllBytes(), StandardCharsets.UTF_8);
+                if (!styles.contains("FF1C2A43") || !styles.contains("FFE5EFFA")
                         || !styles.contains("B Nazanin")
                         || !styles.contains("numFmtId=\"49\"")) {
                     throw new AssertionError("Expected styled report header and alternating row fill");
+                }
+                if (!flaggedReport.contains("rightToLeft=\"1\"")
+                        || !flaggedReport.contains("<autoFilter")
+                        || !flaggedReport.contains("00000008")
+                        || flaggedReport.contains("توضیح برای پیگیری")
+                        || !flaggedReport.contains("2026/11/12 10:00")
+                        || !flaggedReport.contains("00001234")
+                        || !flaggedReport.contains("12345678901234567890")
+                        || !flaggedReport.contains("width=\"14\"")) {
+                    throw new AssertionError("Expected filterable flagged report with six columns and an audit-number field");
+                }
+                if (!styles.contains("applyFont=\"1\"")
+                        || !report.contains("<rFont val=\"B Nazanin\"/>")
+                        || !report.contains("<charset val=\"178\"/>")
+                        || !report.contains("width=\"12\"")
+                        || !report.contains("width=\"25\"")
+                        || !report.contains("FFE5EFFA") && !styles.contains("FFE5EFFA")) {
+                    throw new AssertionError("Expected explicit Persian font, compact widths, and stripes");
                 }
                 if (!report.contains("rightToLeft=\"1\"") || !report.contains("showGridLines=\"0\"")
                         || !report.contains("topLeftCell=\"A1\"") || report.contains("<pane")
@@ -73,7 +104,7 @@ public final class CoreSelfTest {
             Files.deleteIfExists(file.toPath());
         }
         testSharedStringsAndNumberStyle();
-        System.out.println("PASS: normalization, four-sheet styled XLSX, Persian text, shared strings, padded numbers");
+        System.out.println("PASS: normalization, five-sheet styled XLSX, Persian text, flags, shared strings, padded numbers");
     }
 
     private static void testSharedStringsAndNumberStyle() throws Exception {
