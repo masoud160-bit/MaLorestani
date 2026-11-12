@@ -47,7 +47,7 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity {
     private static final int OPEN_XLSX = 100;
     private static final int SAVE_REPORT = 101;
-    // v2.1: approved portrait design; functional clear control and a slightly brighter header.
+    // v2.2: store review flag and observation in one transaction; no separate flag save.
     private static final int BACKGROUND = Color.rgb(25, 30, 36); // #191E24; user's background sample
     private static final int NAVY = Color.rgb(38, 56, 72); // #263848: distinguish header from #191E24 body
     private static final int HEADER_BORDER = Color.rgb(67, 94, 114);
@@ -70,7 +70,6 @@ public final class MainActivity extends Activity {
     private LinearLayout flagArea;
     private LinearLayout mismatchArea;
     private EditText surveyInput;
-    private Button saveFlagButton;
     private Button clearFlagButton;
     private Button mismatchChooseButton;
     private LinearLayout resultDetail;
@@ -98,6 +97,8 @@ public final class MainActivity extends Activity {
     private String selectedPlate;
     private AuditDb.Item selectedItem;
     private boolean busy;
+    // Until an observation is confirmed, this review selection remains a UI draft.
+    private boolean reviewSelected;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -281,15 +282,10 @@ public final class MainActivity extends Activity {
         flagArea.addView(surveyInput, fullParams(dp(9)));
         flagHint = text("", 12, MUTED, false);
         flagArea.addView(flagHint, fullParams(dp(5)));
-        LinearLayout flagActions = new LinearLayout(this);
-        flagActions.setOrientation(LinearLayout.HORIZONTAL);
-        flagActions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        saveFlagButton = button("ثبت / ذخیره علامت", BLUE);
-        clearFlagButton = outlinedButton("برداشتن علامت", RED);
-        flagActions.addView(saveFlagButton, weightedAction());
-        flagActions.addView(clearFlagButton, weightedAction());
-        flagArea.addView(flagActions);
-        saveFlagButton.setOnClickListener(v -> saveFlagFromInput());
+        // No independent Save button. Confirming a match or recording a name
+        // discrepancy commits the observation and this optional review flag together.
+        clearFlagButton = outlinedButton("لغو علامت‌گذاری", RED);
+        flagArea.addView(clearFlagButton, fullParams(dp(3)));
         clearFlagButton.setOnClickListener(v -> removeFlagFromInput());
         flagArea.setVisibility(View.GONE);
         root.addView(flagArea, fullParams(dp(8)));
@@ -399,11 +395,11 @@ public final class MainActivity extends Activity {
         });
         addMenuItem(items, "?", "راهنما", false, () -> {
             showHomeScreen();
-            showDetailsDialog("راهنما", "ابتدا فایل اکسل را از منو وارد کنید. پلاک را بنویسید و کلید جست‌وجو یا تأیید صفحه‌کلید را بزنید. برای پاک‌کردن پلاک، ضربدر کنار کادر را لمس کنید. سپس تأیید، ثبت مغایرت یا علامت‌گذاری را انجام دهید. برای پلاک خارج از فهرست، نام واقعی را وارد کنید. شماره آمایش اختیاری است و محدودیت تعداد رقم ندارد.");
+            showDetailsDialog("راهنما", "ابتدا فایل اکسل را از منو وارد کنید و پلاک را جست‌وجو کنید. برای پاک‌کردن پلاک، ضربدر کنار کادر را لمس کنید. در صورت نیاز «علامت‌گذاری» را بزنید و شماره آمایش اختیاری را وارد کنید؛ سپس «تأیید مشاهده» یا «ثبت مغایرت نام» را بزنید. نتیجه و علامت با هم ذخیره می‌شوند و در دو برگهٔ خروجی دیده می‌شوند. برای پلاک خارج از فهرست، نام واقعی را وارد کنید.");
         });
         addMenuItem(items, "ⓘ", "درباره برنامه", false, () -> {
             showHomeScreen();
-            showDetailsDialog("درباره برنامه", "کنترل و تطبیق اثاثیه — نسخهٔ ۲٫۱\nعملکرد آفلاین، گزارش پنج‌برگه‌ای، حفظ علامت‌های فرسودگی و شماره آمایش.");
+            showDetailsDialog("درباره برنامه", "کنترل و تطبیق اثاثیه — نسخهٔ ۲٫۲\nعملکرد آفلاین، ثبت یکپارچهٔ علامت و نتیجه، گزارش پنج‌برگه‌ای و شماره آمایش.");
         });
     }
 
@@ -550,52 +546,58 @@ public final class MainActivity extends Activity {
 
     private void updateFlagControls() {
         if (selectedPlate == null || selectedItem == null) {
+            reviewSelected = false;
             flagButton.setVisibility(View.GONE);
             flagArea.setVisibility(View.GONE);
             return;
         }
         AuditDb.Flag flag = database.flag(selectedPlate);
+        reviewSelected = flag != null;
         flagButton.setVisibility(View.VISIBLE);
         flagButton.setText(flag == null ? "⚑\nعلامت‌گذاری" : "⚑\nویرایش علامت");
         surveyInput.setText(flag == null ? "" : flag.surveyNumber);
-        clearFlagButton.setVisibility(flag == null ? View.GONE : View.VISIBLE);
-        flagHint.setText(flag == null ? "تعداد رقم محدود نیست؛ صفرهای ابتدایی حفظ می‌شوند."
-                : "علامت قبلاً ثبت شده است. می‌توانید شماره آمایش را اصلاح کنید.");
+        clearFlagButton.setText(flag == null ? "لغو علامت‌گذاری" : "برداشتن علامت");
+        flagHint.setText("شماره آمایش اختیاری است و محدودیت رقم ندارد. «تأیید مشاهده» یا «ثبت مغایرت نام» علامت و نتیجه را با هم ثبت می‌کند.");
         flagArea.setVisibility(flag == null ? View.GONE : View.VISIBLE);
     }
 
     private void showFlagDialog() {
         if (busy || selectedPlate == null || selectedItem == null) return;
+        reviewSelected = true;
         flagArea.setVisibility(View.VISIBLE);
-        if (flagArea.getVisibility() == View.VISIBLE) {
-            surveyInput.requestFocus();
-            screenScroll.post(() -> screenScroll.smoothScrollTo(0, flagArea.getTop()));
-        }
-    }
-
-    private void saveFlagFromInput() {
-        if (busy || selectedPlate == null || selectedItem == null) return;
-        String plate = selectedPlate;
-        AuditDb.Flag old = database.flag(plate);
-        try {
-            String note = old == null ? "" : old.note;
-            database.markForReview(plate, note, surveyInput.getText().toString());
-            refreshDashboard();
-            Toast.makeText(this, "علامت ثبت شد؛ وضعیت تطبیق تغییر نکرد.", Toast.LENGTH_SHORT).show();
-            finishCurrentPlate();
-        } catch (Exception error) { alert("ثبت علامت ناموفق بود: " + error.getMessage()); }
+        flagButton.setText("⚑\nعلامت انتخاب شد");
+        surveyInput.requestFocus();
+        screenScroll.post(() -> screenScroll.smoothScrollTo(0, flagArea.getTop()));
+        surveyInput.post(() -> {
+            InputMethodManager keyboard = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (keyboard != null) keyboard.showSoftInput(surveyInput, InputMethodManager.SHOW_IMPLICIT);
+        });
     }
 
     private void removeFlagFromInput() {
         if (busy || selectedPlate == null || selectedItem == null) return;
         String plate = selectedPlate;
+        AuditDb.Flag old = database.flag(plate);
+        if (old == null) {
+            // Discard only this unsaved selection; retain the current lookup.
+            reviewSelected = false;
+            surveyInput.setText("");
+            flagArea.setVisibility(View.GONE);
+            flagButton.setText("⚑\nعلامت‌گذاری");
+            hideKeyboard(surveyInput);
+            return;
+        }
         new AlertDialog.Builder(this).setTitle("برداشتن علامت")
-                .setMessage("علامت فرسودگی / خروج این پلاک برداشته شود؟ وضعیت تطبیق تغییر نمی‌کند.")
+                .setMessage("علامت فرسودگی / خروج این پلاک برداشته شود؟ وضعیت تطبیق قبلی تغییر نمی‌کند.")
                 .setNegativeButton("انصراف", null)
                 .setPositiveButton("برداشتن", (dialog, which) -> {
                     database.unmarkForReview(plate);
+                    reviewSelected = false;
+                    surveyInput.setText("");
+                    flagArea.setVisibility(View.GONE);
+                    flagButton.setText("⚑\nعلامت‌گذاری");
+                    hideKeyboard(surveyInput);
                     refreshDashboard();
-                    finishCurrentPlate();
                 }).show();
     }
 
@@ -610,6 +612,7 @@ public final class MainActivity extends Activity {
     private void finishCurrentPlate() {
         selectedPlate = null;
         selectedItem = null;
+        reviewSelected = false;
         resultPanel.setVisibility(View.GONE);
         actionButtons.setVisibility(View.GONE);
         mismatchArea.setVisibility(View.GONE);
@@ -632,8 +635,14 @@ public final class MainActivity extends Activity {
         String plate = selectedPlate;
         String value = status == AuditDb.MATCH ? selectedItem.name : observed;
         try {
-            database.record(plate, value, status);
-            Toast.makeText(this, "ثبت شد: " + plate, Toast.LENGTH_SHORT).show();
+            // Atomic: a flagged asset appears in BOTH its observation report and
+            // the review sheet with the same survey number. For unflagged assets,
+            // only the observation is written; existing flags are never erased.
+            boolean flagged = reviewSelected && selectedItem != null;
+            String survey = flagged ? surveyInput.getText().toString() : "";
+            database.recordWithReview(plate, value, status, flagged, survey);
+            Toast.makeText(this, flagged ? "نتیجه و علامت با هم ثبت شد: " + plate :
+                    "ثبت شد: " + plate, Toast.LENGTH_SHORT).show();
             refreshDashboard();
             finishCurrentPlate();
         } catch (Exception ex) { alert("ثبت ناموفق بود: " + ex.getMessage()); }
@@ -927,7 +936,6 @@ public final class MainActivity extends Activity {
         removeButton.setEnabled(!isBusy);
         flagButton.setEnabled(!isBusy);
         mismatchChooseButton.setEnabled(!isBusy);
-        saveFlagButton.setEnabled(!isBusy);
         clearFlagButton.setEnabled(!isBusy);
     }
 

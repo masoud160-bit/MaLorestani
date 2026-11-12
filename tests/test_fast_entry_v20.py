@@ -1,4 +1,4 @@
-"""Static UI and fast-entry regressions for the approved v2.1 portrait design."""
+"""Static UI and fast-entry regressions for the approved portrait design."""
 from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
@@ -49,8 +49,8 @@ def test_fast_keyboard_and_validated_record_flows():
     assert 'actionButtons.setVisibility(View.GONE)' in finish
     assert 'surveyInput.setText("")' in finish
     record = between('private void submitObservation(', 'private void confirmRemove()')
-    assert record.index('database.record(') < record.index('finishCurrentPlate()')
-    assert record.index('actualInput.requestFocus()') < record.index('database.record(')
+    assert record.index('database.recordWithReview(') < record.index('finishCurrentPlate()')
+    assert record.index('actualInput.requestFocus()') < record.index('database.recordWithReview(')
     focus = between('private void focusNextPlate()', 'private void hideKeyboard')
     assert 'plateInput.setText("")' in focus
     assert 'plateInput.requestFocus()' in focus
@@ -62,16 +62,15 @@ def test_fast_keyboard_and_validated_record_flows():
 
 
 def test_flagging_independent_and_report_retained():
-    assert 'database.markForReview(plate, note, surveyInput.getText().toString())' in MAIN
+    assert 'database.recordWithReview(plate, value, status, flagged, survey)' in MAIN
     assert 'database.unmarkForReview(plate)' in MAIN
-    mark = between('private void saveFlagFromInput()', 'private void removeFlagFromInput()')
-    assert 'database.record(' not in mark
-    assert 'finishCurrentPlate();' in mark
+    assert 'saveFlagButton' not in MAIN and 'saveFlagFromInput' not in MAIN
+    assert 'reviewSelected = true;' in MAIN
     db = (ROOT / 'app/src/main/java/ir/assetaudit/AuditDb.java').read_text(encoding='utf-8')
     assert 'super(context, "asset_audit.db", null, 3)' in db
     assert 'return Arrays.asList(mismatch, missing, extra, matched, flagged)' in db
-    assert "versionName '2.1.0'" in GRADLE
-    assert 'versionCode 12' in GRADLE
+    assert "versionName '2.2.0'" in GRADLE
+    assert 'versionCode 13' in GRADLE
 
 
 def test_accessible_vector_resources():

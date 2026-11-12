@@ -58,6 +58,6 @@ def test_clear_vector_android_resource_and_version():
     root = ET.parse(icon).getroot()
     assert root.tag.endswith('vector')
     assert len(root) >= 2
-    assert "versionName '2.1.0'" in GRADLE
-    assert 'versionCode 12' in GRADLE
+    assert "versionName '2.2.0'" in GRADLE
+    assert 'versionCode 13' in GRADLE
     assert 'setContentDescription("باز کردن منو")' in MAIN

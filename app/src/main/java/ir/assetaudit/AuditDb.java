@@ -127,16 +127,54 @@ public final class AuditDb extends SQLiteOpenHelper {
     }
 
     public void record(String plate, String observedName, int status) {
+        recordWithReview(plate, observedName, status, false, "");
+    }
+
+    /** One all-or-nothing write: the inspection result and the selected
+     *  review flag (including the survey number) must never diverge.
+     *  A false flag selection does not remove an older persisted flag.
+     */
+    public void recordWithReview(String plate, String observedName, int status,
+                                 boolean markForReview, String surveyNumber) {
         boolean known = lookup(plate) != null;
         if ((known && status == EXTRA) || (!known && status != EXTRA)) {
             throw new IllegalArgumentException("وضعیت پلاک با فهرست تطابق ندارد.");
         }
-        ContentValues values = new ContentValues();
-        values.put("plate", plate);
-        values.put("observed_name", observedName);
-        values.put("status", status);
-        values.put("updated_at", System.currentTimeMillis());
-        getWritableDatabase().insertWithOnConflict("observations", null, values, SQLiteDatabase.CONFLICT_REPLACE);
+        if (markForReview && !known) {
+            throw new IllegalArgumentException("فقط پلاک موجود در فهرست قابل علامت‌گذاری است.");
+        }
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            long timestamp = System.currentTimeMillis();
+            ContentValues observation = new ContentValues();
+            observation.put("plate", plate);
+            observation.put("observed_name", observedName);
+            observation.put("status", status);
+            observation.put("updated_at", timestamp);
+            if (db.insertWithOnConflict("observations", null, observation,
+                    SQLiteDatabase.CONFLICT_REPLACE) == -1) {
+                throw new IllegalStateException("ثبت نتیجه انجام نشد.");
+            }
+            if (markForReview) {
+                String previousNote = "";
+                try (Cursor c = db.query("asset_flags", new String[]{"note"},
+                        "plate=?", new String[]{plate}, null, null, null)) {
+                    if (c.moveToFirst()) previousNote = c.getString(0);
+                }
+                ContentValues flag = new ContentValues();
+                flag.put("plate", plate);
+                flag.put("note", previousNote);
+                // Store as TEXT to preserve leading zeros, regardless of length.
+                flag.put("survey_number", surveyNumber == null ? "" : surveyNumber.trim());
+                flag.put("updated_at", timestamp);
+                if (db.insertWithOnConflict("asset_flags", null, flag,
+                        SQLiteDatabase.CONFLICT_REPLACE) == -1) {
+                    throw new IllegalStateException("ثبت علامت انجام نشد.");
+                }
+            }
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
     }
 
     public void removeObservation(String plate) {
