@@ -1,4 +1,4 @@
-"""Static UI and fast-entry regressions for the approved v2.0 portrait design."""
+"""Static UI and fast-entry regressions for the approved v2.1 portrait design."""
 from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
@@ -70,15 +70,15 @@ def test_flagging_independent_and_report_retained():
     db = (ROOT / 'app/src/main/java/ir/assetaudit/AuditDb.java').read_text(encoding='utf-8')
     assert 'super(context, "asset_audit.db", null, 3)' in db
     assert 'return Arrays.asList(mismatch, missing, extra, matched, flagged)' in db
-    assert "versionName '2.0.0'" in GRADLE
-    assert 'versionCode 11' in GRADLE
+    assert "versionName '2.1.0'" in GRADLE
+    assert 'versionCode 12' in GRADLE
 
 
 def test_accessible_vector_resources():
-    for name in ('ic_asset_desk.xml', 'ic_search_plate.xml', 'ic_status_bell.xml'):
+    for name in ('ic_asset_desk.xml', 'ic_clear_plate.xml', 'ic_status_bell.xml'):
         path = ROOT / 'app/src/main/res/drawable' / name
         root = ET.parse(path).getroot()
         assert root.tag.endswith('vector')
         assert len(root) >= 1
-    assert 'setContentDescription("جست‌وجوی پلاک")' in MAIN
+    assert 'setContentDescription("پاک کردن شماره پلاک و ورود شماره جدید")' in MAIN
     assert 'setContentDescription("باز کردن منو")' in MAIN

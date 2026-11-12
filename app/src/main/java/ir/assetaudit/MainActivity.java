@@ -13,6 +13,7 @@ import android.os.Looper;
 import android.text.InputType;
 import android.content.Context;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
@@ -46,9 +47,10 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity {
     private static final int OPEN_XLSX = 100;
     private static final int SAVE_REPORT = 101;
-    // v2.0: grounded in the two supplied visual samples and selected portrait design.
+    // v2.1: approved portrait design; functional clear control and a slightly brighter header.
     private static final int BACKGROUND = Color.rgb(25, 30, 36); // #191E24; user's background sample
-    private static final int NAVY = Color.rgb(20, 30, 42);
+    private static final int NAVY = Color.rgb(38, 56, 72); // #263848: distinguish header from #191E24 body
+    private static final int HEADER_BORDER = Color.rgb(67, 94, 114);
     private static final int PANEL = Color.rgb(28, 41, 55);
     private static final int PANEL_ALT = Color.rgb(33, 50, 67);
     private static final int BORDER = Color.rgb(62, 89, 111);
@@ -89,7 +91,7 @@ public final class MainActivity extends Activity {
     private Button mismatchButton;
     private Button extraButton;
     private Button removeButton;
-    private ImageView lookupButton;
+    private ImageView clearPlateButton;
     private LinearLayout actionButtons;
     private ProgressBar loading;
     private File pendingImport;
@@ -124,7 +126,7 @@ public final class MainActivity extends Activity {
         header.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(7), dp(4), dp(7), dp(5));
-        header.setBackground(rounded(NAVY, dp(0), dp(0)));
+        header.setBackground(rounded(NAVY, dp(7), HEADER_BORDER));
         TextView menu = text("☰", 27, TEXT, false);
         menu.setGravity(Gravity.CENTER);
         menu.setContentDescription("باز کردن منو");
@@ -145,8 +147,8 @@ public final class MainActivity extends Activity {
         recentList = text("", 14, MUTED, false);
         recentList.setLineSpacing(dp(5), 1f);
 
-        // Plate input is high and spacious. The left icon acts as SEARCH, not an
-        // undocumented camera scanner. IME search also performs the lookup.
+        // Replace the scanner/search icon with a real clear button.
+        // Search is still available through the numeric keyboard's action key.
         LinearLayout plateCard = vertical();
         plateCard.setPadding(dp(5), dp(4), dp(5), dp(5));
         plateCard.addView(text("شماره پلاک", 15, TEXT, true), fullParams(dp(6)));
@@ -165,18 +167,26 @@ public final class MainActivity extends Activity {
         plateInput.setBackgroundColor(Color.TRANSPARENT);
         plateInput.setPadding(dp(13), dp(4), dp(12), dp(4));
         plateRow.addView(plateInput, new LinearLayout.LayoutParams(0, dp(59), 1f));
-        lookupButton = new ImageView(this);
-        lookupButton.setImageResource(R.drawable.ic_search_plate);
-        lookupButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        lookupButton.setPadding(dp(11), dp(11), dp(11), dp(11));
-        lookupButton.setContentDescription("جست‌وجوی پلاک");
-        lookupButton.setBackground(rounded(PANEL_ALT, dp(10), BORDER));
-        plateRow.addView(lookupButton, new LinearLayout.LayoutParams(dp(56), dp(53)));
+        clearPlateButton = new ImageView(this);
+        clearPlateButton.setImageResource(R.drawable.ic_clear_plate);
+        clearPlateButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        clearPlateButton.setPadding(dp(11), dp(11), dp(11), dp(11));
+        clearPlateButton.setContentDescription("پاک کردن شماره پلاک و ورود شماره جدید");
+        clearPlateButton.setBackground(rounded(PANEL_ALT, dp(10), BORDER));
+        plateRow.addView(clearPlateButton, new LinearLayout.LayoutParams(dp(56), dp(53)));
         plateCard.addView(plateRow);
         root.addView(plateCard, fullParams(dp(10)));
-        lookupButton.setOnClickListener(v -> searchPlate());
+        clearPlateButton.setOnClickListener(v -> clearPlateEntry());
         plateInput.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_SEARCH) { searchPlate(); return true; }
+            // Numeric keyboards may label their action key Search, Done, Go or Enter.
+            if (actionId == EditorInfo.IME_ACTION_SEARCH
+                    || actionId == EditorInfo.IME_ACTION_DONE
+                    || actionId == EditorInfo.IME_ACTION_GO
+                    || (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER
+                        && event.getAction() == KeyEvent.ACTION_DOWN)) {
+                searchPlate();
+                return true;
+            }
             return false;
         });
 
@@ -389,11 +399,11 @@ public final class MainActivity extends Activity {
         });
         addMenuItem(items, "?", "راهنما", false, () -> {
             showHomeScreen();
-            showDetailsDialog("راهنما", "ابتدا فایل اکسل را از منو وارد کنید. پلاک را بنویسید و نماد جست‌وجو را بزنید. سپس تأیید، ثبت مغایرت یا علامت‌گذاری را انجام دهید. برای پلاک خارج از فهرست، نام واقعی را وارد کنید. شماره آمایش اختیاری است و محدودیت تعداد رقم ندارد.");
+            showDetailsDialog("راهنما", "ابتدا فایل اکسل را از منو وارد کنید. پلاک را بنویسید و کلید جست‌وجو یا تأیید صفحه‌کلید را بزنید. برای پاک‌کردن پلاک، ضربدر کنار کادر را لمس کنید. سپس تأیید، ثبت مغایرت یا علامت‌گذاری را انجام دهید. برای پلاک خارج از فهرست، نام واقعی را وارد کنید. شماره آمایش اختیاری است و محدودیت تعداد رقم ندارد.");
         });
         addMenuItem(items, "ⓘ", "درباره برنامه", false, () -> {
             showHomeScreen();
-            showDetailsDialog("درباره برنامه", "کنترل و تطبیق اثاثیه — نسخهٔ ۲٫۰\nعملکرد آفلاین، گزارش پنج‌برگه‌ای، حفظ علامت‌های فرسودگی و شماره آمایش.");
+            showDetailsDialog("درباره برنامه", "کنترل و تطبیق اثاثیه — نسخهٔ ۲٫۱\nعملکرد آفلاین، گزارش پنج‌برگه‌ای، حفظ علامت‌های فرسودگی و شماره آمایش.");
         });
     }
 
@@ -587,6 +597,14 @@ public final class MainActivity extends Activity {
                     refreshDashboard();
                     finishCurrentPlate();
                 }).show();
+    }
+
+    /** Clear is a real action: discard the displayed lookup (not stored records),
+     *  clear the entry and reopen the numeric keyboard for a fresh plate.
+     */
+    private void clearPlateEntry() {
+        if (busy) return;
+        finishCurrentPlate();
     }
 
     private void finishCurrentPlate() {
@@ -902,7 +920,7 @@ public final class MainActivity extends Activity {
     private void setBusy(boolean isBusy) {
         busy = isBusy;
         loading.setVisibility(isBusy ? View.VISIBLE : View.GONE);
-        lookupButton.setEnabled(!isBusy);
+        clearPlateButton.setEnabled(!isBusy);
         matchedButton.setEnabled(!isBusy);
         mismatchButton.setEnabled(!isBusy);
         extraButton.setEnabled(!isBusy);
