@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#0D1117</color>
-    <color name="app_cobalt">#3B69A5</color>
+    <color name="ic_launcher_background">#191E24</color>
+    <color name="app_cobalt">#509BD5</color>
     <color name="app_gold">#D6A04C</color>
-    <color name="app_graphite">#0D1117</color>
+    <color name="app_graphite">#191E24</color>
 </resources>

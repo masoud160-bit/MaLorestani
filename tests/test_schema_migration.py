@@ -8,7 +8,7 @@ assert 'oldVersion >= 2 && oldVersion < 3' in source
 assert 'ALTER TABLE asset_flags ADD COLUMN survey_number TEXT NOT NULL DEFAULT' in source
 assert 'return Arrays.asList(mismatch, missing, extra, matched, flagged)' in source
 assert 'values.put("survey_number", surveyNumber == null ? "" : surveyNumber.trim())' in source
-assert 'survey.setInputType(InputType.TYPE_CLASS_NUMBER)' in activity
+assert 'surveyInput.setInputType(InputType.TYPE_CLASS_NUMBER)' in activity
 assert 'setMaxLength' not in activity and 'LengthFilter' not in activity
 assert 'getString(4), c.getString(1), stateLabel' in source
 con=sqlite3.connect(':memory:')
